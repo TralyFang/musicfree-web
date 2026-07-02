@@ -1,8 +1,13 @@
 import { NavLink } from 'react-router-dom'
+import { useAtomValue } from 'jotai'
+import { musicSheetsAtom } from '@/core/musicSheet'
 
 const navItems = [
     { path: '/', label: '首页', icon: 'home-outline' },
     { path: '/search', label: '搜索', icon: 'magnifying-glass' },
+    { path: '/sheets', label: '歌单', icon: 'playlist' },
+    { path: '/history', label: '历史', icon: 'clock-outline' },
+    { path: '/playing', label: '正在播放', icon: 'musical-note' },
     { path: '/setting', label: '设置', icon: 'cog-8-tooth' },
 ]
 
@@ -11,6 +16,8 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ onClose }: SidebarProps) {
+    const sheets = useAtomValue(musicSheetsAtom)
+
     return (
         <aside className="w-60 h-full bg-surface-900 lg:bg-surface-900/50 border-r border-white/5 flex flex-col shrink-0">
             {/* Logo */}
@@ -36,7 +43,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
             </div>
 
             {/* 导航 */}
-            <nav className="flex-1 px-3 py-2 space-y-1">
+            <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto">
                 <div className="text-xs text-surface-300/60 uppercase tracking-wider px-4 py-2">
                     菜单
                 </div>
@@ -60,14 +67,32 @@ export default function Sidebar({ onClose }: SidebarProps) {
                 ))}
 
                 {/* 歌单区域 */}
-                <div className="mt-6">
-                    <div className="text-xs text-surface-300/60 uppercase tracking-wider px-4 py-2">
-                        我的歌单
+                {sheets.length > 0 && (
+                    <div className="mt-6">
+                        <div className="text-xs text-surface-300/60 uppercase tracking-wider px-4 py-2">
+                            我的歌单
+                        </div>
+                        <div className="space-y-0.5">
+                            {sheets.slice(0, 10).map((sheet) => (
+                                <NavLink
+                                    key={sheet.id}
+                                    to={`/playlist/${sheet.id}`}
+                                    onClick={onClose}
+                                    className={({ isActive }) =>
+                                        `nav-item text-sm ${isActive ? 'nav-item-active' : ''}`
+                                    }
+                                >
+                                    <img
+                                        src="/icons/svg/musical-note.svg"
+                                        alt=""
+                                        className="w-4 h-4 opacity-50"
+                                    />
+                                    <span className="truncate">{sheet.title}</span>
+                                </NavLink>
+                            ))}
+                        </div>
                     </div>
-                    <div className="px-4 py-3 text-sm text-surface-300/50">
-                        暂无歌单
-                    </div>
-                </div>
+                )}
             </nav>
 
             {/* 底部信息 */}

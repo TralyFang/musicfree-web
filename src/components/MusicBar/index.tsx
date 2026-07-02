@@ -1,101 +1,105 @@
-import { useAtom } from 'jotai'
+import { useAtomValue } from 'jotai'
 import { currentMusicAtom, isPlayingAtom, currentTimeAtom, durationAtom } from '@/store'
-import { DefaultArtwork } from '@/constants'
+import trackPlayer from '@/core/trackPlayer'
 
-/** 格式化时间 mm:ss */
 function formatTime(seconds: number): string {
-    if (!seconds || isNaN(seconds)) return '00:00'
-    const min = Math.floor(seconds / 60)
-    const sec = Math.floor(seconds % 60)
-    return `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`
+    if (!seconds || !isFinite(seconds)) return '0:00'
+    const m = Math.floor(seconds / 60)
+    const s = Math.floor(seconds % 60)
+    return `${m}:${s.toString().padStart(2, '0')}`
 }
 
 export default function MusicBar() {
-    const [currentMusic] = useAtom(currentMusicAtom)
-    const [isPlaying, setIsPlaying] = useAtom(isPlayingAtom)
-    const [currentTime] = useAtom(currentTimeAtom)
-    const [duration] = useAtom(durationAtom)
+    const currentMusic = useAtomValue(currentMusicAtom)
+    const isPlaying = useAtomValue(isPlayingAtom)
+    const currentTime = useAtomValue(currentTimeAtom)
+    const duration = useAtomValue(durationAtom)
 
     const progress = duration > 0 ? (currentTime / duration) * 100 : 0
 
+    const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (!duration) return
+        const rect = e.currentTarget.getBoundingClientRect()
+        const x = e.clientX - rect.left
+        const percent = x / rect.width
+        trackPlayer.seekTo(percent * duration)
+    }
+
+    if (!currentMusic) {
+        return (
+            <div className="fixed bottom-0 left-0 right-0 h-16 md:h-[72px] bg-surface-900/95
+                backdrop-blur-xl border-t border-white/5 flex items-center justify-center
+                text-sm text-surface-300/40 z-40">
+                未在播放
+            </div>
+        )
+    }
+
     return (
-        <div className="fixed bottom-0 left-0 right-0 h-16 md:h-[72px] bg-surface-900/95 backdrop-blur-lg border-t border-white/5 flex items-center z-30">
+        <div className="fixed bottom-0 left-0 right-0 h-16 md:h-[72px] bg-surface-900/95
+            backdrop-blur-xl border-t border-white/5 z-40 flex flex-col">
             {/* 进度条 */}
-            <div className="absolute top-0 left-0 right-0 h-[2px] bg-white/10">
+            <div
+                className="w-full h-1 bg-white/5 cursor-pointer group"
+                onClick={handleSeek}
+            >
                 <div
-                    className="h-full bg-primary-500 transition-all duration-300"
+                    className="h-full bg-primary-500 transition-[width] duration-200 group-hover:bg-primary-400"
                     style={{ width: `${progress}%` }}
                 />
             </div>
 
-            {/* 移动端布局 */}
-            <div className="flex items-center w-full px-3 md:px-4 gap-3">
+            {/* 播放器内容 */}
+            <div className="flex-1 flex items-center px-3 md:px-6 gap-3 md:gap-4">
                 {/* 歌曲信息 */}
-                <div className="flex items-center gap-3 flex-1 min-w-0 md:w-[280px] md:flex-none">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
                     <img
-                        src={currentMusic?.artwork || DefaultArtwork}
-                        alt="cover"
-                        className="w-10 h-10 md:w-11 md:h-11 rounded-lg object-cover shadow-lg shrink-0"
+                        src={currentMusic.artwork || '/icons/logo.png'}
+                        alt=""
+                        className="w-10 h-10 md:w-11 md:h-11 rounded-lg object-cover bg-white/5 shrink-0"
                     />
-                    <div className="flex-1 min-w-0">
-                        <p className="text-sm text-white truncate">
-                            {currentMusic?.title || '未在播放'}
-                        </p>
-                        <p className="text-xs text-surface-300/60 truncate">
-                            {currentMusic?.artist || '---'}
-                        </p>
+                    <div className="min-w-0">
+                        <p className="text-sm text-white truncate">{currentMusic.title}</p>
+                        <p className="text-xs text-surface-300/60 truncate">{currentMusic.artist}</p>
                     </div>
                 </div>
 
-                {/* 中间：播放控制 */}
-                <div className="flex flex-col items-center justify-center gap-0.5 md:flex-1">
-                    <div className="flex items-center gap-2 md:gap-4">
-                        {/* 上一首 - 移动端隐藏 */}
-                        <button
-                            className="hidden md:block p-1.5 rounded-full hover:bg-white/10 transition-colors"
-                            aria-label="上一首"
-                        >
-                            <img src="/icons/svg/skip-left.svg" alt="上一首" className="w-5 h-5" />
-                        </button>
-
-                        {/* 播放/暂停 */}
-                        <button
-                            className="p-2 rounded-full bg-white hover:bg-white/90 transition-colors"
-                            onClick={() => setIsPlaying(!isPlaying)}
-                            aria-label={isPlaying ? '暂停' : '播放'}
-                        >
-                            <img
-                                src={isPlaying ? '/icons/svg/pause.svg' : '/icons/svg/play.svg'}
-                                alt={isPlaying ? '暂停' : '播放'}
-                                className="w-4 h-4 md:w-5 md:h-5 invert"
-                            />
-                        </button>
-
-                        {/* 下一首 */}
-                        <button
-                            className="p-1.5 rounded-full hover:bg-white/10 transition-colors"
-                            aria-label="下一首"
-                        >
-                            <img src="/icons/svg/skip-right.svg" alt="下一首" className="w-5 h-5" />
-                        </button>
-                    </div>
-
-                    {/* 时间显示 - 移动端隐藏 */}
-                    <div className="hidden md:flex items-center gap-2 text-xs text-surface-300/60">
-                        <span>{formatTime(currentTime)}</span>
-                        <span>/</span>
-                        <span>{formatTime(duration)}</span>
-                    </div>
-                </div>
-
-                {/* 右侧：音量等控制 - 移动端隐藏 */}
-                <div className="hidden md:flex w-[280px] items-center justify-end gap-3">
+                {/* 控制按钮 */}
+                <div className="flex items-center gap-2 md:gap-3">
                     <button
-                        className="p-1.5 rounded-full hover:bg-white/10 transition-colors"
-                        aria-label="播放列表"
+                        onClick={() => trackPlayer.skipToPrevious()}
+                        className="p-1.5 rounded-full hover:bg-white/5 transition-colors"
+                        aria-label="上一首"
                     >
-                        <img src="/icons/svg/playlist.svg" alt="播放列表" className="w-5 h-5" />
+                        <img src="/icons/svg/skip-left.svg" alt="上一首" className="w-5 h-5 opacity-70" />
                     </button>
+
+                    <button
+                        onClick={() => trackPlayer.togglePlay()}
+                        className="p-2 rounded-full bg-primary-600 hover:bg-primary-500 transition-colors"
+                        aria-label={isPlaying ? '暂停' : '播放'}
+                    >
+                        <img
+                            src={isPlaying ? '/icons/svg/pause.svg' : '/icons/svg/play.svg'}
+                            alt={isPlaying ? '暂停' : '播放'}
+                            className="w-5 h-5"
+                        />
+                    </button>
+
+                    <button
+                        onClick={() => trackPlayer.skipToNext()}
+                        className="p-1.5 rounded-full hover:bg-white/5 transition-colors"
+                        aria-label="下一首"
+                    >
+                        <img src="/icons/svg/skip-right.svg" alt="下一首" className="w-5 h-5 opacity-70" />
+                    </button>
+                </div>
+
+                {/* 时间显示（桌面端） */}
+                <div className="hidden md:flex items-center gap-1 text-xs text-surface-300/50 w-24 justify-end">
+                    <span>{formatTime(currentTime)}</span>
+                    <span>/</span>
+                    <span>{formatTime(duration)}</span>
                 </div>
             </div>
         </div>

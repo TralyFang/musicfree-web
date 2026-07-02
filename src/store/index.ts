@@ -22,5 +22,8 @@ export const repeatModeAtom = atom<RepeatMode>(RepeatMode.Queue);
 /** 播放队列 */
 export const playQueueAtom = atom<IMusic.IMusicItem[]>([]);
 
+/** 播放队列当前索引 */
+export const playQueueIndexAtom = atom<number>(0);
+
 /** 侧边栏是否展开（移动端） */
 export const sidebarOpenAtom = atom(false);

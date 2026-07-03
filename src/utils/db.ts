@@ -92,6 +92,24 @@ export interface IDBLyricCache {
     updatedAt: number;
 }
 
+const DB_NAME = 'MusicFreeDB'
+const DB_VERSION = 2
+
+const DB_STORES = {
+    plugins: 'hash, name, platform, createdAt',
+    pluginMeta: 'name, order, enabled',
+    playlist: 'id, updatedAt',
+    musicSheets: 'id, title, createdAt, updatedAt',
+    history: 'id, timestamp',
+    mediaCache: 'key, updatedAt',
+    lyricCache: 'key, updatedAt',
+}
+
+function createDB(): MusicFreeDB {
+    const db = new MusicFreeDB()
+    return db
+}
+
 class MusicFreeDB extends Dexie {
     plugins!: EntityTable<IDBPlugin, 'hash'>;
     pluginMeta!: EntityTable<IDBPluginMeta, 'name'>;
@@ -102,18 +120,38 @@ class MusicFreeDB extends Dexie {
     lyricCache!: EntityTable<IDBLyricCache, 'key'>;
 
     constructor() {
-        super('MusicFreeDB');
-        this.version(1).stores({
-            plugins: 'hash, name, platform, createdAt',
-            pluginMeta: 'name, order, enabled',
-            playlist: 'id, updatedAt',
-            musicSheets: 'id, title, createdAt, updatedAt',
-            history: 'id, timestamp',
-            mediaCache: 'key, updatedAt',
-            lyricCache: 'key, updatedAt',
-        });
+        super(DB_NAME);
+        this.version(DB_VERSION).stores(DB_STORES);
     }
 }
 
 /** 全局数据库实例 */
-export const db = new MusicFreeDB();
+export let db = createDB();
+
+/**
+ * 确保数据库可用。
+ * 如果打开时出现升级错误（如主键变更），自动删除旧库并重建。
+ */
+export async function ensureDB(): Promise<void> {
+    try {
+        await db.open()
+    } catch (e: any) {
+        const msg = e?.message || e?.inner?.message || ''
+        if (
+            msg.includes('UpgradeError') ||
+            msg.includes('changing primary key') ||
+            msg.includes('DatabaseClosedError')
+        ) {
+            console.warn('[DB] Schema incompatible, deleting old database and recreating...')
+            try {
+                db.close()
+            } catch {}
+            await Dexie.delete(DB_NAME)
+            db = createDB()
+            await db.open()
+            console.info('[DB] Database recreated successfully')
+        } else {
+            throw e
+        }
+    }
+}

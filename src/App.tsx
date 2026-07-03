@@ -7,6 +7,10 @@ import Playlist from '@/pages/Playlist'
 import MusicDetail from '@/pages/MusicDetail'
 import History from '@/pages/History'
 import SheetList from '@/pages/SheetList'
+import TopList from '@/pages/TopList'
+import Recommend from '@/pages/Recommend'
+import AlbumDetail from '@/pages/AlbumDetail'
+import ArtistDetail from '@/pages/ArtistDetail'
 
 function App() {
     return (
@@ -18,6 +22,10 @@ function App() {
                 <Route path="playlist/:id" element={<Playlist />} />
                 <Route path="history" element={<History />} />
                 <Route path="playing" element={<MusicDetail />} />
+                <Route path="toplist" element={<TopList />} />
+                <Route path="recommend" element={<Recommend />} />
+                <Route path="album" element={<AlbumDetail />} />
+                <Route path="artist" element={<ArtistDetail />} />
                 <Route path="setting" element={<Setting />} />
             </Route>
         </Routes>

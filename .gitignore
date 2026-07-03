@@ -24,3 +24,5 @@ dist-ssr
 *.sw?
 .vite
 .npm-cache
+.workbuddy
+!docs/

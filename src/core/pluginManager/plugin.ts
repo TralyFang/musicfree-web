@@ -2,7 +2,6 @@
  * 插件沙箱执行引擎 - Web 版
  * 从主项目迁移并适配浏览器环境
  */
-import axios from 'axios'
 import * as cheerio from 'cheerio'
 import CryptoJs from 'crypto-js'
 import dayjs from 'dayjs'
@@ -10,18 +9,35 @@ import bigInt from 'big-integer'
 import qs from 'qs'
 import he from 'he'
 import pluginMeta from './pluginMeta'
+import { createProxyAxios } from '@/core/proxy'
 
 const sha256 = CryptoJs.SHA256
+
+// 代理版 axios（所有请求自动走 CORS 代理）
+const proxyAxios = createProxyAxios()
 
 // 插件可用的包
 const packages: Record<string, any> = {
     cheerio,
     'crypto-js': CryptoJs,
-    axios,
+    axios: proxyAxios,
     dayjs,
     'big-integer': bigInt,
     qs,
     he,
+    // webdav: 提供空壳，避免插件 require 报错（Web 环境下大部分 webdav 功能无法使用）
+    webdav: {
+        createClient: () => {
+            console.warn('[Plugin] webdav.createClient is not fully supported in web environment')
+            return {
+                getDirectoryContents: async () => [],
+                getFileContents: async () => '',
+                putFileContents: async () => {},
+                deleteFile: async () => {},
+                exists: async () => false,
+            }
+        },
+    },
 }
 
 const _require = (packageName: string) => {
@@ -256,6 +272,15 @@ export class Plugin {
             result?.musicList?.forEach((item: any) => resetMediaItem(item, this.name))
             return result
         } catch { return null }
+    }
+
+    async getArtistWorks(artistItem: any, page: number = 1, type: string = 'music'): Promise<any> {
+        if (!this.instance.getArtistWorks) return { isEnd: true, data: [] }
+        try {
+            const result = await this.instance.getArtistWorks(artistItem, page, type)
+            result?.data?.forEach((item: any) => resetMediaItem(item, this.name))
+            return result ?? { isEnd: true, data: [] }
+        } catch { return { isEnd: true, data: [] } }
     }
 
     async importMusicSheet(urlLike: string): Promise<any[]> {

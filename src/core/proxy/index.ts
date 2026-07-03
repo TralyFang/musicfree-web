@@ -6,7 +6,7 @@ import axios from 'axios'
 
 /** 代理 Worker 地址 - 用户可在设置中修改 */
 const PROXY_STORAGE_KEY = 'musicfree-proxy-url'
-const DEFAULT_PROXY_URL = 'https://musicfree-cors-proxy.traly.workers.dev'
+const DEFAULT_PROXY_URL = '/_proxy'
 
 /** 获取代理地址 */
 export function getProxyUrl(): string {
@@ -67,7 +67,7 @@ export function createProxyAxios() {
 
     // 请求拦截器：将请求通过代理转发
     instance.interceptors.request.use((config) => {
-        const originalUrl = config.url || ''
+        let originalUrl = config.url || ''
 
         // 跳过已经是代理地址的请求
         if (originalUrl.startsWith(proxyBase)) return config
@@ -75,22 +75,42 @@ export function createProxyAxios() {
         // 跳过相对路径和数据 URL
         if (!originalUrl.startsWith('http')) return config
 
-        const params = new URLSearchParams({ url: originalUrl })
+        // 将 axios params 合并到目标 URL 的 query string 中
+        if (config.params && Object.keys(config.params).length > 0) {
+            const urlObj = new URL(originalUrl)
+            for (const [key, value] of Object.entries(config.params)) {
+                if (value !== undefined && value !== null) {
+                    urlObj.searchParams.set(key, String(value))
+                }
+            }
+            originalUrl = urlObj.toString()
+            // 清除 params，防止 axios 再次追加到代理 URL 上
+            config.params = undefined
+        }
+
+        // 收集自定义 headers（跳过浏览器不允许设置的 unsafe headers）
+        const unsafeHeaders = new Set(['host', 'user-agent', 'content-length', 'connection'])
+        const headerObj: Record<string, string> = {}
         if (config.headers) {
-            const headerObj: Record<string, string> = {}
             for (const [key, value] of Object.entries(config.headers)) {
-                if (typeof value === 'string' && key.toLowerCase() !== 'content-type') {
+                if (typeof value === 'string' && !unsafeHeaders.has(key.toLowerCase())) {
                     headerObj[key] = value
                 }
             }
-            if (Object.keys(headerObj).length > 0) {
-                params.set('headers', JSON.stringify(headerObj))
-            }
         }
 
-        config.url = `${proxyBase}?${params.toString()}`
-        // 清除已被转移到 query 的 headers
+        const proxyParams = new URLSearchParams({ url: originalUrl })
+        if (Object.keys(headerObj).length > 0) {
+            proxyParams.set('headers', JSON.stringify(headerObj))
+        }
+
+        config.url = `${proxyBase}?${proxyParams.toString()}`
+        // 清除已被转移到 query 的 headers（保留 content-type 用于 POST 请求）
+        const contentType = config.headers?.['Content-Type'] || config.headers?.['content-type']
         config.headers = {} as any
+        if (contentType && config.method && config.method.toLowerCase() !== 'get') {
+            config.headers['Content-Type'] = contentType
+        }
         return config
     })
 

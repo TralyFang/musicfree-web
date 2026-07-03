@@ -5,7 +5,7 @@ import { exportBackup, importBackup, ResumeMode } from '@/utils/backup'
 
 export default function Setting() {
     const plugins = useAtomValue(pluginsAtom)
-    const [installUrl, setInstallUrl] = useState('')
+    const [installUrl, setInstallUrl] = useState('https://raw.gitcode.com/maotoumao/MusicFreePlugins/raw/master/plugins.json')
     const [installing, setInstalling] = useState(false)
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)

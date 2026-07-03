@@ -15,6 +15,7 @@ import {
 import pluginManager from '@/core/pluginManager'
 import musicHistoryManager from '@/core/musicHistory'
 import { RepeatMode } from '@/constants'
+import { wrapWithProxy } from '@/core/proxy'
 import Hls from 'hls.js'
 
 class TrackPlayer {
@@ -24,7 +25,6 @@ class TrackPlayer {
 
     constructor() {
         this.audio = new Audio()
-        this.audio.crossOrigin = 'anonymous'
         this.setupEventListeners()
         this.setupMediaSession()
     }
@@ -114,16 +114,25 @@ class TrackPlayer {
             return
         }
 
+        // 外部 URL 走代理解决 CORS
+        const playUrl = url.startsWith('http') ? wrapWithProxy(url, source?.headers) : url
+
         // HLS 流媒体支持
         if (this.isHlsUrl(url) && Hls.isSupported()) {
-            this.hls = new Hls()
-            this.hls.loadSource(url)
+            this.hls = new Hls({
+                xhrSetup: (xhr: XMLHttpRequest, hlsUrl: string) => {
+                    // HLS 分片请求也走代理
+                    const proxiedUrl = hlsUrl.startsWith('http') ? wrapWithProxy(hlsUrl) : hlsUrl
+                    xhr.open('GET', proxiedUrl, true)
+                },
+            })
+            this.hls.loadSource(playUrl)
             this.hls.attachMedia(this.audio)
             this.hls.on(Hls.Events.MANIFEST_PARSED, () => {
                 this.audio.play().catch(() => {})
             })
         } else {
-            this.audio.src = url
+            this.audio.src = playUrl
         }
 
         try {

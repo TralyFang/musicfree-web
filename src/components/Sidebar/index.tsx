@@ -5,7 +5,9 @@ import { musicSheetsAtom } from '@/core/musicSheet'
 const navItems = [
     { path: '/', label: '首页', icon: 'home-outline' },
     { path: '/search', label: '搜索', icon: 'magnifying-glass' },
-    { path: '/sheets', label: '歌单', icon: 'playlist' },
+    { path: '/toplist', label: '榜单', icon: 'trophy' },
+    { path: '/recommend', label: '推荐歌单', icon: 'fire-outline' },
+    { path: '/sheets', label: '我的歌单', icon: 'playlist' },
     { path: '/history', label: '历史', icon: 'clock-outline' },
     { path: '/playing', label: '正在播放', icon: 'musical-note' },
     { path: '/setting', label: '设置', icon: 'cog-8-tooth' },

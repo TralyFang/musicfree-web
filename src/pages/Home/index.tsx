@@ -32,7 +32,7 @@ export default function Home() {
     }
 
     // 播放历史中的歌曲
-    const handlePlayHistory = async (item: any, index: number) => {
+    const handlePlayHistory = async (_item: any, index: number) => {
         const historyItems = history.slice(0, 20)
         await trackPlayer.setQueueAndPlay(historyItems, index)
     }

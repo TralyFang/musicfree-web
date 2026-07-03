@@ -12,6 +12,7 @@ import Recommend from '@/pages/Recommend'
 import AlbumDetail from '@/pages/AlbumDetail'
 import ArtistDetail from '@/pages/ArtistDetail'
 import { ToastContainer } from '@/components/Toast'
+import ReloadPrompt from '@/components/ReloadPrompt'
 
 function App() {
     return (
@@ -32,6 +33,7 @@ function App() {
                 </Route>
             </Routes>
             <ToastContainer />
+            <ReloadPrompt />
         </>
     )
 }

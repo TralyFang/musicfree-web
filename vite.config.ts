@@ -112,7 +112,7 @@ export default defineConfig({
     react(),
     localProxyPlugin(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       includeAssets: ['icons/logo.png', 'icons/svg/*.svg'],
       manifest: {
         name: 'MusicFree',

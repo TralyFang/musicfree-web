@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAtomValue } from 'jotai'
-import { currentMusicAtom, isPlayingAtom, currentTimeAtom, durationAtom } from '@/store'
+import { currentMusicAtom, isPlayingAtom, currentTimeAtom, durationAtom, repeatModeAtom } from '@/store'
 import trackPlayer from '@/core/trackPlayer'
 import pluginManager from '@/core/pluginManager'
+import musicSheetManager from '@/core/musicSheet'
 import { parseLrc, mergeLrcTranslation, findCurrentLyricIndex, type ILyricLine } from '@/utils/lrcParser'
 import { useNavigate } from 'react-router-dom'
+import { RepeatMode } from '@/constants'
+import Toast from '@/components/Toast'
 
 function formatTime(seconds: number): string {
     if (!seconds || !isFinite(seconds)) return '0:00'
@@ -13,34 +16,39 @@ function formatTime(seconds: number): string {
     return `${m}:${s.toString().padStart(2, '0')}`
 }
 
+type ViewMode = 'cover' | 'lyric'
+
 export default function MusicDetail() {
     const navigate = useNavigate()
     const currentMusic = useAtomValue(currentMusicAtom)
     const isPlaying = useAtomValue(isPlayingAtom)
     const currentTime = useAtomValue(currentTimeAtom)
     const duration = useAtomValue(durationAtom)
+    const repeatMode = useAtomValue(repeatModeAtom)
 
+    const [viewMode, setViewMode] = useState<ViewMode>('cover')
     const [lyrics, setLyrics] = useState<ILyricLine[]>([])
     const [currentLyricIndex, setCurrentLyricIndex] = useState(-1)
+    const [isFavorite, setIsFavorite] = useState(false)
+    const [isDragging, setIsDragging] = useState(false)
+    const [dragProgress, setDragProgress] = useState(0)
     const lyricsContainerRef = useRef<HTMLDivElement>(null)
+    const progressBarRef = useRef<HTMLDivElement>(null)
+
+    const progress = duration > 0 ? (currentTime / duration) * 100 : 0
+    const displayProgress = isDragging ? dragProgress : progress
 
     // 获取歌词
     useEffect(() => {
-        if (!currentMusic) {
-            setLyrics([])
-            return
-        }
-
+        if (!currentMusic) { setLyrics([]); return }
         let cancelled = false
 
         const fetchLyrics = async () => {
             const plugin = pluginManager.getByMedia(currentMusic)
             if (!plugin) return
-
             try {
                 const lyricResult = await plugin.getLyric(currentMusic)
                 if (cancelled) return
-
                 if (lyricResult?.rawLrc) {
                     const parsed = parseLrc(lyricResult.rawLrc)
                     if (lyricResult.translation) {
@@ -52,114 +60,233 @@ export default function MusicDetail() {
                 } else {
                     setLyrics([])
                 }
-            } catch {
-                if (!cancelled) setLyrics([])
-            }
+            } catch { setLyrics([]) }
         }
-
         fetchLyrics()
         return () => { cancelled = true }
     }, [currentMusic])
 
-    // 更新当前歌词高亮
+    // 检查是否已收藏
     useEffect(() => {
-        const index = findCurrentLyricIndex(lyrics, currentTime)
-        setCurrentLyricIndex(index)
-    }, [currentTime, lyrics])
+        if (!currentMusic) return
+        musicSheetManager.isFavorite(currentMusic).then(setIsFavorite)
+    }, [currentMusic])
 
-    // 歌词滚动跟随
+    // 歌词滚动
     useEffect(() => {
-        if (currentLyricIndex < 0 || !lyricsContainerRef.current) return
-
-        const container = lyricsContainerRef.current
-        const activeEl = container.children[currentLyricIndex] as HTMLElement
-        if (activeEl) {
-            activeEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        if (lyrics.length === 0) return
+        const idx = findCurrentLyricIndex(lyrics, currentTime)
+        if (idx !== currentLyricIndex) {
+            setCurrentLyricIndex(idx)
+            // 自动滚动到当前歌词
+            if (lyricsContainerRef.current && idx >= 0) {
+                const el = lyricsContainerRef.current.children[idx] as HTMLElement
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                }
+            }
         }
-    }, [currentLyricIndex])
+    }, [currentTime, lyrics, currentLyricIndex])
 
-    const handleSeek = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    // 进度条拖拽
+    const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
         if (!duration) return
         const rect = e.currentTarget.getBoundingClientRect()
         const x = e.clientX - rect.left
-        const percent = x / rect.width
-        trackPlayer.seekTo(percent * duration)
+        trackPlayer.seekTo((x / rect.width) * duration)
+    }
+
+    const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+        if (!duration) return
+        setIsDragging(true)
+        const rect = e.currentTarget.getBoundingClientRect()
+        const x = e.touches[0].clientX - rect.left
+        setDragProgress(Math.max(0, Math.min(100, (x / rect.width) * 100)))
     }, [duration])
 
-    const progress = duration > 0 ? (currentTime / duration) * 100 : 0
+    const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+        if (!isDragging || !progressBarRef.current) return
+        const rect = progressBarRef.current.getBoundingClientRect()
+        const x = e.touches[0].clientX - rect.left
+        setDragProgress(Math.max(0, Math.min(100, (x / rect.width) * 100)))
+    }, [isDragging])
+
+    const handleTouchEnd = useCallback(() => {
+        if (!isDragging || !duration) return
+        setIsDragging(false)
+        trackPlayer.seekTo((dragProgress / 100) * duration)
+    }, [isDragging, dragProgress, duration])
+
+    // 收藏切换
+    const handleToggleFavorite = async () => {
+        if (!currentMusic) return
+        if (isFavorite) {
+            await musicSheetManager.removeFromFavorites(currentMusic)
+            setIsFavorite(false)
+            Toast.show('已取消收藏')
+        } else {
+            await musicSheetManager.addToFavorites(currentMusic)
+            setIsFavorite(true)
+            Toast.success('已收藏到我喜欢')
+        }
+    }
+
+    // 切换播放模式
+    const handleToggleRepeatMode = () => {
+        const modes = [RepeatMode.Queue, RepeatMode.RepeatOne, RepeatMode.Shuffle]
+        const currentIndex = modes.indexOf(repeatMode)
+        const nextMode = modes[(currentIndex + 1) % modes.length]
+        trackPlayer.setRepeatMode(nextMode)
+    }
+
+    const repeatModeIcon = repeatMode === RepeatMode.Queue
+        ? '/icons/svg/repeat-song.svg'
+        : repeatMode === RepeatMode.RepeatOne
+        ? '/icons/svg/repeat-song-1.svg'
+        : '/icons/svg/shuffle.svg'
 
     if (!currentMusic) {
         return (
-            <div className="flex items-center justify-center h-full">
-                <p className="text-surface-300/50">当前没有播放歌曲</p>
+            <div className="flex flex-col items-center justify-center h-full text-surface-300/50">
+                <img src="/icons/svg/musical-note.svg" alt="" className="w-16 h-16 opacity-30 mb-4" />
+                <p>暂无播放内容</p>
             </div>
         )
     }
 
     return (
-        <div className="h-full flex flex-col md:flex-row gap-6 overflow-hidden">
-            {/* 返回按钮 */}
-            <button
-                onClick={() => navigate(-1)}
-                className="absolute top-4 left-4 p-2 rounded-full hover:bg-white/5 transition-colors z-10 md:hidden"
-                aria-label="返回"
-            >
-                <img src="/icons/svg/arrow-left.svg" alt="返回" className="w-5 h-5 opacity-70" />
-            </button>
+        <div className="relative flex flex-col h-full min-h-0 -m-4 md:-m-6 overflow-hidden">
+            {/* 背景虚化 */}
+            <div className="absolute inset-0 z-0">
+                <img
+                    src={currentMusic.artwork || '/icons/logo.png'}
+                    alt=""
+                    className="w-full h-full object-cover scale-110 blur-3xl opacity-30"
+                />
+                <div className="absolute inset-0 bg-surface-950/70" />
+            </div>
 
-            {/* 左侧：封面 + 控制 */}
-            <div className="flex flex-col items-center justify-center md:w-2/5 shrink-0 py-6 md:py-0">
-                {/* 封面 */}
-                <div className={`w-56 h-56 md:w-72 md:h-72 rounded-2xl overflow-hidden shadow-2xl shadow-black/30 ${
-                    isPlaying ? 'animate-spin-slow' : ''
-                }`}>
-                    <img
-                        src={currentMusic.artwork || '/icons/logo.png'}
-                        alt={currentMusic.title}
-                        className="w-full h-full object-cover"
-                    />
+            {/* 内容区 */}
+            <div className="relative z-10 flex flex-col h-full">
+                {/* 顶部导航 */}
+                <div className="flex items-center justify-between px-4 py-3 shrink-0">
+                    <button
+                        onClick={() => navigate(-1)}
+                        className="p-2 rounded-full hover:bg-white/10 transition-colors"
+                        aria-label="返回"
+                    >
+                        <img src="/icons/svg/arrow-left.svg" alt="返回" className="w-5 h-5" />
+                    </button>
+                    <div className="text-center min-w-0 flex-1 px-4">
+                        <p className="text-sm font-medium text-white truncate">{currentMusic.title}</p>
+                        <p className="text-xs text-surface-300/60 truncate">{currentMusic.artist}
+                            {currentMusic.platform && <span className="ml-2 px-1.5 py-0.5 rounded bg-white/10 text-[10px]">{currentMusic.platform}</span>}
+                        </p>
+                    </div>
+                    <div className="w-9" /> {/* 占位 */}
                 </div>
 
-                {/* 歌曲信息 */}
-                <div className="mt-6 text-center max-w-xs">
-                    <h2 className="text-lg font-bold text-white truncate">{currentMusic.title}</h2>
-                    <p className="text-sm text-surface-300/60 mt-1 truncate">
-                        {currentMusic.artist}{currentMusic.album ? ` · ${currentMusic.album}` : ''}
-                    </p>
+                {/* 中间区域：封面/歌词切换 */}
+                <div className="flex-1 flex flex-col items-center justify-center min-h-0 px-4">
+                    {viewMode === 'cover' ? (
+                        /* 封面视图 */
+                        <div
+                            className="cursor-pointer"
+                            onClick={() => setViewMode('lyric')}
+                        >
+                            <div className={`w-56 h-56 md:w-72 md:h-72 rounded-full overflow-hidden shadow-2xl border-4 border-white/10 ${isPlaying ? 'animate-spin-slow' : ''}`}>
+                                <img
+                                    src={currentMusic.artwork || '/icons/logo.png'}
+                                    alt=""
+                                    className="w-full h-full object-cover"
+                                />
+                            </div>
+                            <p className="text-center text-xs text-surface-300/40 mt-4">点击查看歌词</p>
+                        </div>
+                    ) : (
+                        /* 歌词视图 */
+                        <div
+                            className="w-full h-full overflow-y-auto cursor-pointer"
+                            onClick={() => setViewMode('cover')}
+                            ref={lyricsContainerRef}
+                        >
+                            {lyrics.length === 0 ? (
+                                <div className="flex items-center justify-center h-full">
+                                    <p className="text-surface-300/40">暂无歌词</p>
+                                </div>
+                            ) : (
+                                <div className="py-20 space-y-4">
+                                    {lyrics.map((line, idx) => (
+                                        <p
+                                            key={idx}
+                                            className={`text-center transition-all duration-300 px-4 ${
+                                                idx === currentLyricIndex
+                                                    ? 'text-white text-base font-medium scale-105'
+                                                    : 'text-surface-300/40 text-sm'
+                                            }`}
+                                        >
+                                            {line.text}
+                                            {line.translation && (
+                                                <span className="block text-xs text-surface-300/30 mt-0.5">{line.translation}</span>
+                                            )}
+                                        </p>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {/* 工具栏 */}
+                <div className="flex items-center justify-center gap-6 px-4 py-2 shrink-0">
+                    <button onClick={handleToggleFavorite} className="p-2 rounded-full hover:bg-white/10 transition-colors" aria-label="收藏">
+                        <img src={isFavorite ? '/icons/svg/heart.svg' : '/icons/svg/heart-outline.svg'} alt="" className={`w-5 h-5 ${isFavorite ? 'brightness-125' : 'opacity-60'}`} />
+                    </button>
+                    <button onClick={() => setViewMode(viewMode === 'cover' ? 'lyric' : 'cover')} className="p-2 rounded-full hover:bg-white/10 transition-colors" aria-label="切换视图">
+                        <img src="/icons/svg/lyric.svg" alt="" className="w-5 h-5 opacity-60" />
+                    </button>
+                    <button onClick={handleToggleRepeatMode} className="p-2 rounded-full hover:bg-white/10 transition-colors" aria-label="播放模式">
+                        <img src={repeatModeIcon} alt="" className="w-5 h-5 opacity-60" />
+                    </button>
+                    <button onClick={() => navigate('/playlist/queue')} className="p-2 rounded-full hover:bg-white/10 transition-colors" aria-label="播放队列">
+                        <img src="/icons/svg/playlist.svg" alt="" className="w-5 h-5 opacity-60" />
+                    </button>
                 </div>
 
                 {/* 进度条 */}
-                <div className="w-full max-w-xs mt-6 space-y-2">
+                <div className="px-4 shrink-0">
                     <div
-                        className="w-full h-1.5 bg-white/10 rounded-full cursor-pointer group"
-                        onClick={handleSeek}
+                        ref={progressBarRef}
+                        className="w-full h-2 bg-white/10 rounded-full cursor-pointer touch-none group"
+                        onClick={handleProgressClick}
+                        onTouchStart={handleTouchStart}
+                        onTouchMove={handleTouchMove}
+                        onTouchEnd={handleTouchEnd}
                     >
                         <div
-                            className="h-full bg-primary-500 rounded-full transition-[width] duration-200 relative group-hover:bg-primary-400"
-                            style={{ width: `${progress}%` }}
+                            className="h-full bg-primary-500 rounded-full relative group-hover:bg-primary-400 transition-colors"
+                            style={{ width: `${displayProgress}%` }}
                         >
-                            <span className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white shadow-md opacity-0 group-hover:opacity-100 transition-opacity" />
+                            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white shadow-md opacity-0 group-hover:opacity-100 transition-opacity" />
                         </div>
                     </div>
-                    <div className="flex justify-between text-xs text-surface-300/50">
+                    <div className="flex justify-between mt-1 text-xs text-surface-300/50">
                         <span>{formatTime(currentTime)}</span>
                         <span>{formatTime(duration)}</span>
                     </div>
                 </div>
 
                 {/* 播放控制 */}
-                <div className="flex items-center gap-6 mt-4">
-                    <button
-                        onClick={() => trackPlayer.skipToPrevious()}
-                        className="p-2 rounded-full hover:bg-white/5 transition-colors"
-                        aria-label="上一首"
-                    >
-                        <img src="/icons/svg/skip-left.svg" alt="" className="w-6 h-6 opacity-70" />
+                <div className="flex items-center justify-center gap-6 px-4 py-4 shrink-0">
+                    <button onClick={handleToggleRepeatMode} className="p-2 rounded-full hover:bg-white/10 transition-colors" aria-label="播放模式">
+                        <img src={repeatModeIcon} alt="" className="w-5 h-5 opacity-50" />
                     </button>
-
+                    <button onClick={() => trackPlayer.skipToPrevious()} className="p-2 rounded-full hover:bg-white/10 transition-colors" aria-label="上一首">
+                        <img src="/icons/svg/skip-left.svg" alt="" className="w-7 h-7" />
+                    </button>
                     <button
                         onClick={() => trackPlayer.togglePlay()}
-                        className="p-4 rounded-full bg-primary-600 hover:bg-primary-500 transition-colors"
+                        className="p-4 rounded-full bg-primary-600 hover:bg-primary-500 transition-colors shadow-lg"
                         aria-label={isPlaying ? '暂停' : '播放'}
                     >
                         <img
@@ -168,52 +295,13 @@ export default function MusicDetail() {
                             className="w-7 h-7"
                         />
                     </button>
-
-                    <button
-                        onClick={() => trackPlayer.skipToNext()}
-                        className="p-2 rounded-full hover:bg-white/5 transition-colors"
-                        aria-label="下一首"
-                    >
-                        <img src="/icons/svg/skip-right.svg" alt="" className="w-6 h-6 opacity-70" />
+                    <button onClick={() => trackPlayer.skipToNext()} className="p-2 rounded-full hover:bg-white/10 transition-colors" aria-label="下一首">
+                        <img src="/icons/svg/skip-right.svg" alt="" className="w-7 h-7" />
+                    </button>
+                    <button onClick={() => navigate('/playlist/queue')} className="p-2 rounded-full hover:bg-white/10 transition-colors" aria-label="播放列表">
+                        <img src="/icons/svg/playlist.svg" alt="" className="w-5 h-5 opacity-50" />
                     </button>
                 </div>
-            </div>
-
-            {/* 右侧：歌词 */}
-            <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-                <h3 className="text-sm font-medium text-surface-300/60 mb-3 shrink-0">歌词</h3>
-
-                {lyrics.length > 0 ? (
-                    <div
-                        ref={lyricsContainerRef}
-                        className="flex-1 overflow-y-auto space-y-3 px-2 scrollbar-thin"
-                    >
-                        {lyrics.map((line, index) => (
-                            <div
-                                key={index}
-                                className={`py-1.5 transition-all duration-300 cursor-pointer hover:text-white/80 ${
-                                    index === currentLyricIndex
-                                        ? 'text-primary-400 text-base font-medium scale-105 origin-left'
-                                        : 'text-surface-300/40 text-sm'
-                                }`}
-                                onClick={() => trackPlayer.seekTo(line.time)}
-                            >
-                                <p>{line.text || '♪'}</p>
-                                {line.translation && (
-                                    <p className={`text-xs mt-0.5 ${
-                                        index === currentLyricIndex ? 'text-primary-300/70' : 'text-surface-300/25'
-                                    }`}>
-                                        {line.translation}
-                                    </p>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                ) : (
-                    <div className="flex-1 flex items-center justify-center">
-                        <p className="text-sm text-surface-300/30">暂无歌词</p>
-                    </div>
-                )}
             </div>
         </div>
     )

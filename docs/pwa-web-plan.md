@@ -2,7 +2,7 @@
 
 ## 一、项目概述
 
-基于 MusicFree 现有的插件体系和数据模型，独立开发一个 Web 端 PWA 音乐播放器。复用现有项目的核心业务逻辑（插件协议、类型定义、数据结构），全新构建 UI 层和播放器层。原生APP项目源码地址: ~/Desktop/project/MusicFree-ios
+基于 MusicFree 现有的插件体系和数据模型，独立开发一个 Web 端 PWA 音乐播放器。复用现有项目的核心业务逻辑（插件协议、类型定义、数据结构），全新构建 UI 层和播放器层。原生APP项目源码地址: ~/Desktop/project/MusicFree-master
 
 ### 目标
 

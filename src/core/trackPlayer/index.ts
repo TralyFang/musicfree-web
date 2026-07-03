@@ -246,6 +246,11 @@ class TrackPlayer {
         this.store.set(playQueueAtom, queue)
     }
 
+    /** 设置播放模式 */
+    setRepeatMode(mode: RepeatMode) {
+        this.store.set(repeatModeAtom, mode)
+    }
+
     /** 设置音量 (0-1) */
     setVolume(volume: number) {
         this.audio.volume = Math.max(0, Math.min(1, volume))

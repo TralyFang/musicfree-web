@@ -99,6 +99,56 @@ class MusicSheetManager {
         return JSON.parse(sheet.musicList || '[]')
     }
 
+    /** 获取所有歌单（兼容别名） */
+    async getAllSheets(): Promise<IMusic.IMusicSheetItem[]> {
+        const sheets = await this.getAll()
+        return sheets.map(s => ({
+            id: s.id,
+            title: s.title,
+            coverImg: s.coverImg,
+            platform: 'local',
+            musicList: JSON.parse(s.musicList || '[]'),
+        }))
+    }
+
+    /** 收藏到"我喜欢"歌单（自动创建） */
+    async addToFavorites(musicItem: any) {
+        const FAVORITES_ID = '__favorites__'
+        let favorites = await db.musicSheets.get(FAVORITES_ID)
+        if (!favorites) {
+            // 自动创建"我喜欢"歌单
+            const now = Date.now()
+            favorites = {
+                id: FAVORITES_ID,
+                title: '我喜欢',
+                coverImg: undefined,
+                musicList: '[]',
+                createdAt: now,
+                updatedAt: now,
+            }
+            await db.musicSheets.add(favorites)
+        }
+        await this.addMusic(FAVORITES_ID, [musicItem])
+    }
+
+    /** 判断歌曲是否已收藏 */
+    async isFavorite(musicItem: any): Promise<boolean> {
+        const FAVORITES_ID = '__favorites__'
+        const list = await this.getMusicList(FAVORITES_ID)
+        return list.some(m => m.platform === musicItem.platform && m.id === musicItem.id)
+    }
+
+    /** 从"我喜欢"移除 */
+    async removeFromFavorites(musicItem: any) {
+        const FAVORITES_ID = '__favorites__'
+        await this.removeMusic(FAVORITES_ID, musicItem)
+    }
+
+    /** 添加单首歌到指定歌单（便捷方法） */
+    async addMusicToSheet(sheetId: string, musicItem: any) {
+        await this.addMusic(sheetId, [musicItem])
+    }
+
     /** 刷新状态 */
     private async refreshState() {
         const sheets = await this.getAll()

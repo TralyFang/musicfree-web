@@ -241,6 +241,58 @@ class PluginManager {
         sortedPlugins.forEach((p, i) => { orderMap[p.name] = i })
         pluginMeta.setPluginOrder(orderMap)
     }
+
+    // ========== 插件订阅 ==========
+
+    private readonly SUBSCRIPTION_KEY = 'musicfree-plugin-subscriptions'
+
+    /** 获取所有订阅源 */
+    getSubscriptions(): Array<{ url: string; name?: string; lastUpdated?: number }> {
+        try {
+            const raw = localStorage.getItem(this.SUBSCRIPTION_KEY)
+            return raw ? JSON.parse(raw) : []
+        } catch { return [] }
+    }
+
+    /** 添加订阅源 */
+    addSubscription(url: string, name?: string) {
+        const subs = this.getSubscriptions()
+        if (subs.some(s => s.url === url)) return // 已存在
+        subs.push({ url, name: name || url, lastUpdated: 0 })
+        localStorage.setItem(this.SUBSCRIPTION_KEY, JSON.stringify(subs))
+    }
+
+    /** 移除订阅源 */
+    removeSubscription(url: string) {
+        const subs = this.getSubscriptions().filter(s => s.url !== url)
+        localStorage.setItem(this.SUBSCRIPTION_KEY, JSON.stringify(subs))
+    }
+
+    /** 更新单个订阅 */
+    async updateSubscription(url: string): Promise<{ success: boolean; message: string }> {
+        const result = await this.installPluginFromUrl(url)
+        if (result.success) {
+            const subs = this.getSubscriptions()
+            const idx = subs.findIndex(s => s.url === url)
+            if (idx !== -1) {
+                subs[idx].lastUpdated = Date.now()
+                localStorage.setItem(this.SUBSCRIPTION_KEY, JSON.stringify(subs))
+            }
+        }
+        return { success: result.success, message: result.message || '更新成功' }
+    }
+
+    /** 更新全部订阅 */
+    async updateAllSubscriptions(): Promise<{ success: number; failed: number }> {
+        const subs = this.getSubscriptions()
+        let success = 0, failed = 0
+        for (const sub of subs) {
+            const result = await this.updateSubscription(sub.url)
+            if (result.success) success++
+            else failed++
+        }
+        return { success, failed }
+    }
 }
 
 const pluginManager = new PluginManager()

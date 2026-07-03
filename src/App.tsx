@@ -11,6 +11,7 @@ import TopList from '@/pages/TopList'
 import Recommend from '@/pages/Recommend'
 import AlbumDetail from '@/pages/AlbumDetail'
 import ArtistDetail from '@/pages/ArtistDetail'
+import LocalMusic from '@/pages/LocalMusic'
 import { ToastContainer } from '@/components/Toast'
 import ReloadPrompt from '@/components/ReloadPrompt'
 
@@ -29,6 +30,7 @@ function App() {
                     <Route path="recommend" element={<Recommend />} />
                     <Route path="album" element={<AlbumDetail />} />
                     <Route path="artist" element={<ArtistDetail />} />
+                    <Route path="local" element={<LocalMusic />} />
                     <Route path="setting" element={<Setting />} />
                 </Route>
             </Routes>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAtomValue } from 'jotai'
-import { currentMusicAtom, isPlayingAtom, currentTimeAtom, durationAtom, repeatModeAtom } from '@/store'
+import { currentMusicAtom, isPlayingAtom, currentTimeAtom, durationAtom, repeatModeAtom, playbackRateAtom, sleepTimerRemainingAtom } from '@/store'
 import trackPlayer from '@/core/trackPlayer'
 import pluginManager from '@/core/pluginManager'
 import musicSheetManager from '@/core/musicSheet'
@@ -26,12 +26,17 @@ export default function MusicDetail() {
     const duration = useAtomValue(durationAtom)
     const repeatMode = useAtomValue(repeatModeAtom)
 
+    const playbackRate = useAtomValue(playbackRateAtom)
+    const sleepTimerRemaining = useAtomValue(sleepTimerRemainingAtom)
+
     const [viewMode, setViewMode] = useState<ViewMode>('cover')
     const [lyrics, setLyrics] = useState<ILyricLine[]>([])
     const [currentLyricIndex, setCurrentLyricIndex] = useState(-1)
     const [isFavorite, setIsFavorite] = useState(false)
     const [isDragging, setIsDragging] = useState(false)
     const [dragProgress, setDragProgress] = useState(0)
+    const [showSpeedMenu, setShowSpeedMenu] = useState(false)
+    const [showTimerMenu, setShowTimerMenu] = useState(false)
     const lyricsContainerRef = useRef<HTMLDivElement>(null)
     const progressBarRef = useRef<HTMLDivElement>(null)
 
@@ -238,16 +243,70 @@ export default function MusicDetail() {
                 </div>
 
                 {/* 工具栏 */}
-                <div className="flex items-center justify-center gap-6 px-4 py-2 shrink-0">
+                <div className="flex items-center justify-center gap-4 px-4 py-2 shrink-0">
                     <button onClick={handleToggleFavorite} className="p-2 rounded-full hover:bg-white/10 transition-colors" aria-label="收藏">
                         <img src={isFavorite ? '/icons/svg/heart.svg' : '/icons/svg/heart-outline.svg'} alt="" className={`w-5 h-5 ${isFavorite ? 'brightness-125' : 'opacity-60'}`} />
                     </button>
                     <button onClick={() => setViewMode(viewMode === 'cover' ? 'lyric' : 'cover')} className="p-2 rounded-full hover:bg-white/10 transition-colors" aria-label="切换视图">
                         <img src="/icons/svg/lyric.svg" alt="" className="w-5 h-5 opacity-60" />
                     </button>
-                    <button onClick={handleToggleRepeatMode} className="p-2 rounded-full hover:bg-white/10 transition-colors" aria-label="播放模式">
-                        <img src={repeatModeIcon} alt="" className="w-5 h-5 opacity-60" />
-                    </button>
+                    {/* 倍速 */}
+                    <div className="relative">
+                        <button
+                            onClick={() => { setShowSpeedMenu(!showSpeedMenu); setShowTimerMenu(false) }}
+                            className={`px-2 py-1 rounded-md text-xs font-medium transition-colors ${playbackRate !== 1 ? 'bg-primary-600/80 text-white' : 'hover:bg-white/10 text-surface-300/60'}`}
+                            aria-label="倍速"
+                        >
+                            {playbackRate}x
+                        </button>
+                        {showSpeedMenu && (
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-surface-800 border border-white/10 rounded-lg shadow-xl py-1 z-50 min-w-[80px]">
+                                {[0.5, 0.75, 1, 1.25, 1.5, 2].map(rate => (
+                                    <button
+                                        key={rate}
+                                        onClick={() => { trackPlayer.setPlaybackRate(rate); setShowSpeedMenu(false) }}
+                                        className={`block w-full px-3 py-1.5 text-xs text-center transition-colors ${playbackRate === rate ? 'text-primary-400 bg-primary-600/20' : 'text-white/70 hover:bg-white/10'}`}
+                                    >
+                                        {rate}x
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    {/* 定时关闭 */}
+                    <div className="relative">
+                        <button
+                            onClick={() => { setShowTimerMenu(!showTimerMenu); setShowSpeedMenu(false) }}
+                            className={`p-2 rounded-full transition-colors ${sleepTimerRemaining > 0 ? 'bg-primary-600/80' : 'hover:bg-white/10'}`}
+                            aria-label="定时关闭"
+                        >
+                            {sleepTimerRemaining > 0 ? (
+                                <span className="text-xs font-medium text-white">{Math.ceil(sleepTimerRemaining / 60)}m</span>
+                            ) : (
+                                <img src="/icons/svg/alarm-outline.svg" alt="" className="w-5 h-5 opacity-60" />
+                            )}
+                        </button>
+                        {showTimerMenu && (
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-surface-800 border border-white/10 rounded-lg shadow-xl py-1 z-50 min-w-[100px]">
+                                {[
+                                    { label: '关闭', value: 0 },
+                                    { label: '15分钟', value: 15 },
+                                    { label: '30分钟', value: 30 },
+                                    { label: '45分钟', value: 45 },
+                                    { label: '60分钟', value: 60 },
+                                    { label: '90分钟', value: 90 },
+                                ].map(opt => (
+                                    <button
+                                        key={opt.value}
+                                        onClick={() => { trackPlayer.setSleepTimer(opt.value); setShowTimerMenu(false) }}
+                                        className={`block w-full px-3 py-1.5 text-xs text-center transition-colors ${sleepTimerRemaining > 0 && opt.value === 0 ? 'text-red-400 hover:bg-red-500/10' : 'text-white/70 hover:bg-white/10'}`}
+                                    >
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                     <button onClick={() => navigate('/playlist/queue')} className="p-2 rounded-full hover:bg-white/10 transition-colors" aria-label="播放队列">
                         <img src="/icons/svg/playlist.svg" alt="" className="w-5 h-5 opacity-60" />
                     </button>

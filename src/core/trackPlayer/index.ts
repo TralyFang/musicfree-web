@@ -11,6 +11,9 @@ import {
     playQueueAtom,
     playQueueIndexAtom,
     repeatModeAtom,
+    playbackRateAtom,
+    sleepTimerAtom,
+    sleepTimerRemainingAtom,
 } from '@/store'
 import pluginManager from '@/core/pluginManager'
 import musicHistoryManager from '@/core/musicHistory'
@@ -261,8 +264,58 @@ class TrackPlayer {
         return this.audio.volume
     }
 
+    /** 设置播放倍速 */
+    setPlaybackRate(rate: number) {
+        this.audio.playbackRate = rate
+        this.store.set(playbackRateAtom, rate)
+    }
+
+    /** 获取播放倍速 */
+    getPlaybackRate() {
+        return this.audio.playbackRate
+    }
+
+    /** 定时关闭 */
+    private sleepTimerId: ReturnType<typeof setInterval> | null = null
+
+    setSleepTimer(minutes: number) {
+        // 清除已有定时器
+        this.clearSleepTimer()
+
+        if (minutes <= 0) {
+            this.store.set(sleepTimerAtom, 0)
+            this.store.set(sleepTimerRemainingAtom, 0)
+            return
+        }
+
+        this.store.set(sleepTimerAtom, minutes)
+        this.store.set(sleepTimerRemainingAtom, minutes * 60)
+
+        this.sleepTimerId = setInterval(() => {
+            const remaining = this.store.get(sleepTimerRemainingAtom) as number
+            if (remaining <= 1) {
+                this.clearSleepTimer()
+                this.pause()
+                this.store.set(sleepTimerAtom, 0)
+                this.store.set(sleepTimerRemainingAtom, 0)
+            } else {
+                this.store.set(sleepTimerRemainingAtom, remaining - 1)
+            }
+        }, 1000)
+    }
+
+    clearSleepTimer() {
+        if (this.sleepTimerId) {
+            clearInterval(this.sleepTimerId)
+            this.sleepTimerId = null
+        }
+        this.store.set(sleepTimerAtom, 0)
+        this.store.set(sleepTimerRemainingAtom, 0)
+    }
+
     /** 销毁播放器 */
     destroy() {
+        this.clearSleepTimer()
         this.audio.pause()
         this.audio.src = ''
     }

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useAtomValue } from 'jotai'
 import pluginManager, { pluginsAtom, pluginMeta } from '@/core/pluginManager'
 import { exportBackup, importBackup, ResumeMode } from '@/utils/backup'
@@ -9,6 +9,15 @@ export default function Setting() {
     const [installing, setInstalling] = useState(false)
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
+
+    // 插件订阅
+    const [subscriptions, setSubscriptions] = useState(pluginManager.getSubscriptions())
+    const [subUrl, setSubUrl] = useState('')
+    const [updatingAll, setUpdatingAll] = useState(false)
+
+    useEffect(() => {
+        setSubscriptions(pluginManager.getSubscriptions())
+    }, [])
 
     const showMessage = (type: 'success' | 'error', text: string) => {
         setMessage({ type, text })
@@ -178,6 +187,112 @@ export default function Setting() {
                         恢复备份
                     </button>
                 </div>
+            </section>
+
+            {/* 插件订阅 */}
+            <section className="space-y-4">
+                <h2 className="text-base font-semibold text-white/90">插件订阅</h2>
+                <p className="text-xs text-surface-300/50">
+                    添加插件源 URL 后，可一键更新所有订阅的插件到最新版本。
+                </p>
+
+                {/* 添加订阅 */}
+                <div className="flex gap-2">
+                    <input
+                        type="text"
+                        value={subUrl}
+                        onChange={(e) => setSubUrl(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && subUrl.trim()) {
+                                pluginManager.addSubscription(subUrl.trim())
+                                setSubscriptions(pluginManager.getSubscriptions())
+                                setSubUrl('')
+                                showMessage('success', '订阅源已添加')
+                            }
+                        }}
+                        placeholder="输入插件源 URL..."
+                        className="flex-1 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10
+                            text-white text-sm placeholder:text-surface-300/40
+                            focus:outline-none focus:border-primary-500/50 transition-all"
+                    />
+                    <button
+                        onClick={() => {
+                            if (!subUrl.trim()) return
+                            pluginManager.addSubscription(subUrl.trim())
+                            setSubscriptions(pluginManager.getSubscriptions())
+                            setSubUrl('')
+                            showMessage('success', '订阅源已添加')
+                        }}
+                        disabled={!subUrl.trim()}
+                        className="px-4 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-500
+                            disabled:opacity-50 text-white text-sm font-medium transition-colors shrink-0"
+                    >
+                        添加
+                    </button>
+                </div>
+
+                {/* 一键更新 */}
+                {subscriptions.length > 0 && (
+                    <button
+                        onClick={async () => {
+                            setUpdatingAll(true)
+                            const result = await pluginManager.updateAllSubscriptions()
+                            setSubscriptions(pluginManager.getSubscriptions())
+                            setUpdatingAll(false)
+                            showMessage('success', `更新完成：成功 ${result.success} 个${result.failed > 0 ? `，失败 ${result.failed} 个` : ''}`)
+                        }}
+                        disabled={updatingAll}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl
+                            bg-white/5 border border-white/10 hover:bg-white/10
+                            disabled:opacity-50 text-sm text-surface-300 transition-colors"
+                    >
+                        <img src="/icons/svg/arrow-path.svg" alt="" className={`w-4 h-4 opacity-60 ${updatingAll ? 'animate-spin' : ''}`} />
+                        {updatingAll ? '更新中...' : '一键更新全部订阅'}
+                    </button>
+                )}
+
+                {/* 订阅列表 */}
+                {subscriptions.length > 0 && (
+                    <div className="space-y-2">
+                        {subscriptions.map((sub) => (
+                            <div
+                                key={sub.url}
+                                className="flex items-center gap-3 px-4 py-3 rounded-xl
+                                    bg-white/[0.03] border border-white/5"
+                            >
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm text-white truncate">{sub.name || sub.url}</p>
+                                    <p className="text-xs text-surface-300/50 truncate">
+                                        {sub.url}
+                                        {sub.lastUpdated ? ` · 上次更新: ${new Date(sub.lastUpdated).toLocaleDateString()}` : ''}
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={async () => {
+                                        const result = await pluginManager.updateSubscription(sub.url)
+                                        setSubscriptions(pluginManager.getSubscriptions())
+                                        showMessage(result.success ? 'success' : 'error', result.message)
+                                    }}
+                                    className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                                    aria-label="更新订阅"
+                                >
+                                    <img src="/icons/svg/arrow-path.svg" alt="" className="w-4 h-4 opacity-60" />
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        pluginManager.removeSubscription(sub.url)
+                                        setSubscriptions(pluginManager.getSubscriptions())
+                                        showMessage('success', '已移除订阅')
+                                    }}
+                                    className="p-1.5 rounded-lg hover:bg-red-500/10 transition-colors"
+                                    aria-label="移除订阅"
+                                >
+                                    <img src="/icons/svg/trash-outline.svg" alt="" className="w-4 h-4 opacity-60" />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </section>
 
             {/* 已安装插件列表 */}

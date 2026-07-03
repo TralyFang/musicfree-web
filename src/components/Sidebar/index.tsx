@@ -9,6 +9,7 @@ const navItems = [
     { path: '/recommend', label: '推荐歌单', icon: 'fire-outline' },
     { path: '/sheets', label: '我的歌单', icon: 'playlist' },
     { path: '/history', label: '历史', icon: 'clock-outline' },
+    { path: '/local', label: '本地音乐', icon: 'folder-music-outline' },
     { path: '/playing', label: '正在播放', icon: 'musical-note' },
     { path: '/setting', label: '设置', icon: 'cog-8-tooth' },
 ]

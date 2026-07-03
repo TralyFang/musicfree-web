@@ -27,3 +27,12 @@ export const playQueueIndexAtom = atom<number>(0);
 
 /** 侧边栏是否展开（移动端） */
 export const sidebarOpenAtom = atom(false);
+
+/** 播放倍速 */
+export const playbackRateAtom = atom(1);
+
+/** 定时关闭（分钟，0表示未设置） */
+export const sleepTimerAtom = atom(0);
+
+/** 定时关闭倒计时剩余秒数 */
+export const sleepTimerRemainingAtom = atom(0);

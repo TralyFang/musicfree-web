@@ -1,8 +1,18 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import { useAtom } from 'jotai'
 import Sidebar from '@/components/Sidebar'
 import MusicBar from '@/components/MusicBar'
 import { sidebarOpenAtom } from '@/store'
+
+/** 页面淡入过渡组件 */
+function PageTransition({ children }: { children: React.ReactNode }) {
+    const location = useLocation()
+    return (
+        <div key={location.pathname} className="animate-page-in">
+            {children}
+        </div>
+    )
+}
 
 export default function Layout() {
     const [sidebarOpen, setSidebarOpen] = useAtom(sidebarOpenAtom)
@@ -46,7 +56,9 @@ export default function Layout() {
                 </header>
 
                 <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-24">
-                    <Outlet />
+                    <PageTransition>
+                        <Outlet />
+                    </PageTransition>
                 </div>
             </main>
 
